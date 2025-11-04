@@ -1,58 +1,381 @@
-<div>Teachable Machine Audio Model</div>
-<button type="button" onclick="init()">Start</button>
-<div id="label-container"></div>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glass Break Detector (Teachable Machine Audio)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.5s ease;
+        }
+        /* Custom CSS for smooth updates and a centered, fluid canvas area */
+        #label-container div {
+            transition: all 0.2s ease-out;
+            margin-bottom: 0.5rem;
+            min-height: 2.5rem; /* Ensure consistent height */
+        }
+    </style>
+    <!-- Load the necessary ML libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/addons/p5.sound.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-audio.min.js"></script>
+</head>
+<body class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
 
-<script type="text/javascript">
-    // more documentation available at
-    // https://github.com/tensorflow/tfjs-models/tree/master/speech-commands
+    <div id="container" class="w-full max-w-lg bg-white shadow-2xl rounded-xl p-6 md:p-10 text-center">
+        <h1 class="text-3xl font-extrabold text-red-600 mb-2">Glass Break Detector</h1>
+        <p class="text-gray-600 mb-6">Real-time audio detection using Teachable Machine.</p>
 
-    // the link to your model provided by Teachable Machine export panel
-    const URL = "./my_model/";
+        <!-- Configuration Warning -->
+        <div id="config-warning" class="bg-yellow-100 text-yellow-800 p-3 rounded-lg border border-yellow-300 text-sm mb-6">
+            <p class="font-semibold">⚠️ Action Required:</p>
+            <p>You must replace `YOUR_MODEL_URL` and `NUM_CLASSES` in the script below with your actual Teachable Machine export data.</p>
+        </div>
 
-    async function createModel() {
-        const checkpointURL = URL + "model.json"; // model topology
-        const metadataURL = URL + "metadata.json"; // model metadata
+        <!-- Detection Status and Button -->
+        <div id="status-message" class="text-lg font-semibold text-gray-700 mb-4">Click Start to load the model...</div>
 
-        const recognizer = speechCommands.create(
-            "BROWSER_FFT", // fourier transform type, not useful to change
-            undefined, // speech commands vocabulary feature, not useful for your models
-            checkpointURL,
-            metadataURL);
+        <button id="start-button" class="w-full py-3 px-6 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg shadow-lg transition duration-150 ease-in-out disabled:opacity-50" onclick="toggleDetection()">
+            Start Detection
+        </button>
 
-        // check that model and metadata are loaded via HTTPS requests.
-        await recognizer.ensureModelLoaded();
+        <!-- Result Display Area -->
+        <div id="label-container" class="mt-8 text-left">
+            <!-- Labels will be dynamically generated here -->
+            <div class="text-gray-500 italic">No labels loaded yet.</div>
+        </div>
 
-        return recognizer;
-    }
+        <!-- Real-time Alert Message -->
+        <div id="alert-box" class="mt-8 p-4 rounded-lg font-bold transition duration-300 transform scale-100 hidden">
+            <!-- Alert message goes here -->
+        </div>
+    </div>
 
-    async function init() {
-        const recognizer = await createModel();
-        const classLabels = recognizer.wordLabels(); // get class labels
-        const labelContainer = document.getElementById("label-container");
-        for (let i = 0; i < classLabels.length; i++) {
-            labelContainer.appendChild(document.createElement("div"));
+    <script>
+        // --- Configuration ---
+        const URL = "YOUR_MODEL_URL"; // <-- REPLACE THIS WITH YOUR TEACEABLE MACHINE EXPORT URL
+        const NUM_CLASSES = 3; // <-- REPLACE THIS WITH THE NUMBER OF CLASSES IN YOUR MODEL (e.g., 3 for 'Background Noise', 'Glass Break', 'Other')
+        // ---------------------
+
+        let model, audio, labelContainer, maxPredictions;
+        let isDetecting = false;
+        let isModelLoaded = false;
+        let labels = []; // To store the names of the labels
+
+        const statusMessage = document.getElementById('status-message');
+        const startButton = document.getElementById('start-button');
+        const alertBox = document.getElementById('alert-box');
+        labelContainer = document.getElementById("label-container");
+
+
+        // Utility to handle base64 to ArrayBuffer for audio playback (for alerts)
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
         }
 
-        // listen() takes two arguments:
-        // 1. A callback function that is invoked anytime a word is recognized.
-        // 2. A configuration object with adjustable fields
-        recognizer.listen(result => {
-            const scores = result.scores; // probability of prediction for each class
-            // render the probability scores per class
-            for (let i = 0; i < classLabels.length; i++) {
-                const classPrediction = classLabels[i] + ": " + result.scores[i].toFixed(2);
-                labelContainer.childNodes[i].innerHTML = classPrediction;
-            }
-        }, {
-            includeSpectrogram: true, // in case listen should return result.spectrogram
-            probabilityThreshold: 0.75,
-            invokeCallbackOnNoiseAndUnknown: true,
-            overlapFactor: 0.50 // probably want between 0.5 and 0.75. More info in README
-        });
+        // Utility to convert raw PCM audio data into a WAV Blob
+        function pcmToWav(pcm16, sampleRate) {
+            const numChannels = 1;
+            const bitsPerSample = 16;
+            const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+            const blockAlign = numChannels * (bitsPerSample / 8);
+            const numSamples = pcm16.length;
+            const buffer = new ArrayBuffer(44 + numSamples * 2);
+            const view = new DataView(buffer);
 
-        // Stop the recognition in 5 seconds.
-        // setTimeout(() => recognizer.stopListening(), 5000);
-    }
-</script>
+            /* RIFF identifier */
+            writeString(view, 0, 'RIFF');
+            /* file length */
+            view.setUint32(4, 36 + numSamples * 2, true);
+            /* RIFF type */
+            writeString(view, 8, 'WAVE');
+            /* format chunk identifier */
+            writeString(view, 12, 'fmt ');
+            /* format chunk length */
+            view.setUint32(16, 16, true);
+            /* sample format (raw) */
+            view.setUint16(20, 1, true);
+            /* channel count */
+            view.setUint16(22, numChannels, true);
+            /* sample rate */
+            view.setUint32(24, sampleRate, true);
+            /* byte rate (sample rate * block align) */
+            view.setUint32(28, byteRate, true);
+            /* block align (channels * bits per sample / 8) */
+            view.setUint16(32, blockAlign, true);
+            /* bits per sample */
+            view.setUint16(34, bitsPerSample, true);
+            /* data chunk identifier */
+            writeString(view, 36, 'data');
+            /* data chunk length */
+            view.setUint32(40, numSamples * 2, true);
+
+            // Write PCM data
+            let offset = 44;
+            for (let i = 0; i < numSamples; i++, offset += 2) {
+                view.setInt16(offset, pcm16[i], true);
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+
+            function writeString(view, offset, string) {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            }
+        }
+
+        // Function to generate TTS audio and play it
+        async function speakAlert(text) {
+            const payload = {
+                contents: [{
+                    parts: [{ text: text }]
+                }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Fenrir" }
+                        }
+                    }
+                },
+                model: "gemini-2.5-flash-preview-tts"
+            };
+
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+
+            try {
+                // Implement exponential backoff for API call
+                let response;
+                const maxRetries = 3;
+                let delay = 1000;
+
+                for (let attempt = 0; attempt < maxRetries; attempt++) {
+                    response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) break;
+
+                    if (attempt < maxRetries - 1) {
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; // Exponential backoff
+                    } else {
+                        throw new Error(`TTS API failed after ${maxRetries} attempts.`);
+                    }
+                }
+
+                const result = await response.json();
+                const part = result?.candidates?.[0]?.content?.parts?.[0];
+                const audioData = part?.inlineData?.data;
+                const mimeType = part?.inlineData?.mimeType;
+
+                if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
+                    // Extract sample rate from MIME type (e.g., audio/L16;rate=16000)
+                    const rateMatch = mimeType.match(/rate=(\d+)/);
+                    if (!rateMatch) {
+                        console.error("Could not determine sample rate from MIME type:", mimeType);
+                        return;
+                    }
+                    const sampleRate = parseInt(rateMatch[1], 10);
+                    const pcmData = base64ToArrayBuffer(audioData);
+
+                    // API returns signed PCM16 audio data.
+                    const pcm16 = new Int16Array(pcmData);
+                    const wavBlob = pcmToWav(pcm16, sampleRate);
+                    const audioUrl = URL.createObjectURL(wavBlob);
+
+                    const audio = new Audio(audioUrl);
+                    audio.play();
+
+                    // Clean up URL object after playback is finished
+                    audio.onended = () => {
+                        URL.revokeObjectURL(audioUrl);
+                    };
+
+                } else {
+                    console.error("TTS response error or missing audio data:", result);
+                }
+            } catch (error) {
+                console.error("Error generating TTS audio:", error);
+            }
+        }
+
+        async function init() {
+            if (URL === "YOUR_MODEL_URL") {
+                statusMessage.textContent = "Configuration Error: Please update YOUR_MODEL_URL and NUM_CLASSES in the script.";
+                startButton.disabled = true;
+                return;
+            }
+
+            // Show loading status
+            startButton.textContent = "Loading Model...";
+            startButton.disabled = true;
+            statusMessage.textContent = "Please wait while the model loads (may take a moment)...";
+
+            try {
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+
+                // Load the model and metadata
+                model = await tmAudio.load(modelURL, metadataURL);
+                maxPredictions = model.get	Metadata().classes.length;
+
+                // Load labels from metadata
+                labels = model.get	Metadata().classes;
+
+                // Create the element for each label
+                labelContainer.innerHTML = ''; // Clear initial message
+                for (let i = 0; i < maxPredictions; i++) {
+                    const labelDiv = document.createElement("div");
+                    labelDiv.className = "flex justify-between items-center bg-gray-100 p-3 rounded-lg";
+                    labelDiv.innerHTML = `<span class="font-medium text-gray-800">${labels[i]}:</span><span id="p${i}" class="text-gray-500 w-1/4 text-right">0%</span>`;
+                    labelContainer.appendChild(labelDiv);
+                }
+
+                isModelLoaded = true;
+                startButton.textContent = "Start Detection";
+                startButton.disabled = false;
+                statusMessage.textContent = "Model loaded successfully. Click Start to begin.";
+
+            } catch (error) {
+                console.error("Error loading model:", error);
+                statusMessage.textContent = "Error loading model. Check your URL and console for details.";
+                startButton.textContent = "Loading Failed";
+                startButton.disabled = true;
+            }
+        }
+
+        async function toggleDetection() {
+            if (!isModelLoaded) {
+                console.log("Model not yet loaded.");
+                return;
+            }
+
+            if (isDetecting) {
+                // Stop detection
+                audio.stop();
+                isDetecting = false;
+                startButton.textContent = "Start Detection";
+                startButton.classList.remove('bg-red-700', 'hover:bg-red-800');
+                startButton.classList.add('bg-red-600', 'hover:bg-red-700');
+                statusMessage.textContent = "Detection stopped.";
+                document.body.classList.remove('bg-red-100');
+                alertBox.classList.add('hidden');
+            } else {
+                // Start detection
+                try {
+                    // Start the audio
+                    audio = new tmAudio.Audio();
+                    await audio.setup(URL + "metadata.json");
+                    await audio.start();
+
+                    // Add the microphone to the model
+                    model.listen(gotResult, {
+                        loop: true,
+                        probabilityThreshold: 0.75, // Adjust this as needed
+                        // overlap: 0, // Uncomment and adjust if your model uses non-overlapping windows
+                    });
+
+                    isDetecting = true;
+                    startButton.textContent = "Stop Detection";
+                    startButton.classList.remove('bg-red-600', 'hover:bg-red-700');
+                    startButton.classList.add('bg-green-600', 'hover:bg-green-700');
+                    statusMessage.textContent = "Listening for sounds...";
+
+                } catch (error) {
+                    console.error("Error starting audio detection:", error);
+                    statusMessage.textContent = "Error: Could not access microphone. Ensure permissions are granted.";
+                }
+            }
+        }
+
+        // Variable to track if an alert has been recently triggered (to avoid spamming)
+        let alertTimeout = null;
+
+        function gotResult(error, results) {
+            if (error) {
+                console.error(error);
+                return;
+            }
+
+            let maxProb = 0;
+            let maxIndex = -1;
+            let glassBreakIndex = -1;
+
+            // Update UI with probabilities
+            for (let i = 0; i < maxPredictions; i++) {
+                const prob = results[i].probability.toFixed(2);
+                const probPercent = (prob * 100).toFixed(0) + '%';
+                const pElement = document.getElementById(`p${i}`);
+                const containerDiv = pElement.parentNode;
+
+                pElement.textContent = probPercent;
+
+                // Visually emphasize the highest probability
+                if (parseFloat(prob) > maxProb) {
+                    maxProb = parseFloat(prob);
+                    maxIndex = i;
+                }
+
+                // Check for 'Glass Break' (assuming it's named 'Glass Break')
+                if (labels[i].toLowerCase().includes('glass') && parseFloat(prob) >= 0.85) {
+                    glassBreakIndex = i;
+                }
+
+                // Reset all to default style
+                containerDiv.classList.remove('bg-red-200', 'font-bold');
+                containerDiv.classList.add('bg-gray-100');
+            }
+
+            // Apply emphasis to the current highest
+            if (maxIndex !== -1) {
+                const maxProbDiv = document.getElementById(`p${maxIndex}`).parentNode;
+                maxProbDiv.classList.remove('bg-gray-100');
+                maxProbDiv.classList.add('bg-blue-100');
+            }
+
+            // Handle Glass Break Alert
+            if (glassBreakIndex !== -1 && maxProb >= 0.85) {
+                const glassBreakLabel = labels[glassBreakIndex];
+                const glassBreakProb = results[glassBreakIndex].probability.toFixed(2);
+
+                document.body.classList.add('bg-red-100');
+                alertBox.classList.remove('hidden');
+                alertBox.classList.remove('bg-green-100');
+                alertBox.classList.add('bg-red-600', 'text-white', 'animate-pulse');
+                alertBox.innerHTML = `<span class="text-2xl">🚨 GLASS BREAK DETECTED! (${(glassBreakProb * 100).toFixed(0)}%)</span>`;
+
+                if (!alertTimeout) {
+                    speakAlert("Warning. Glass break detected.");
+                    // Prevent spamming alerts for 10 seconds
+                    alertTimeout = setTimeout(() => {
+                        clearTimeout(alertTimeout);
+                        alertTimeout = null;
+                        document.body.classList.remove('bg-red-100');
+                        alertBox.classList.add('hidden');
+                    }, 10000);
+                }
+            }
+        }
+
+        // Initialize the model on page load
+        window.onload = init;
+    </script>
+</body>
+</html>
