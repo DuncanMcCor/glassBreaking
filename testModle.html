@@ -34,8 +34,9 @@
 
         <!-- Configuration Warning -->
         <div id="config-warning" class="bg-yellow-100 text-yellow-800 p-3 rounded-lg border border-yellow-300 text-sm mb-6">
-            <p class="font-semibold">⚠️ Action Required:</p>
-            <p>You must replace `YOUR_MODEL_URL` and `NUM_CLASSES` in the script below with your actual Teachable Machine export data.</p>
+            <p class="font-semibold">⚠️ Action Required: Model Not Loaded</p>
+            <p>1. Make sure your Teachable Machine URL **ends with a forward slash (/)**.</p>
+            <p>2. Open your browser's Developer Console (usually F12) to see specific error messages (e.g., "CORS" errors).</p>
         </div>
 
         <!-- Detection Status and Button -->
@@ -59,8 +60,9 @@
 
     <script>
         // --- Configuration ---
-        const URL = "https://teachablemachine.withgoogle.com/models/oeuce1up_/"; // <-- REPLACE THIS WITH YOUR TEACEABLE MACHINE EXPORT URL
-        const NUM_CLASSES = 3; // <-- REPLACE THIS WITH THE NUMBER OF CLASSES IN YOUR MODEL (e.g., 3 for 'Background Noise', 'Glass Break', 'Other')
+        // EXAMPLE OF CORRECT FORMAT (Must end with /):
+        // const URL = "https://teachablemachine.withgoogle.com/models/aBcD123/";
+        const URL = https://teachablemachine.withgoogle.com/models/oeuce1up_/ // <-- REPLACE THIS WITH YOUR TEACEABLE MACHINE EXPORT URL
         // ---------------------
 
         let model, audio, labelContainer, maxPredictions;
@@ -218,7 +220,7 @@
 
         async function init() {
             if (URL === "YOUR_MODEL_URL") {
-                statusMessage.textContent = "Configuration Error: Please update YOUR_MODEL_URL and NUM_CLASSES in the script.";
+                statusMessage.textContent = "Configuration Error: Please update YOUR_MODEL_URL in the script.";
                 startButton.disabled = true;
                 return;
             }
@@ -234,10 +236,10 @@
 
                 // Load the model and metadata
                 model = await tmAudio.load(modelURL, metadataURL);
-                maxPredictions = model.get	Metadata().classes.length;
+                maxPredictions = model.getMetadata().classes.length; // Dynamically get number of classes
 
                 // Load labels from metadata
-                labels = model.get	Metadata().classes;
+                labels = model.getMetadata().classes;
 
                 // Create the element for each label
                 labelContainer.innerHTML = ''; // Clear initial message
@@ -255,7 +257,7 @@
 
             } catch (error) {
                 console.error("Error loading model:", error);
-                statusMessage.textContent = "Error loading model. Check your URL and console for details.";
+                statusMessage.textContent = "Error loading model. Check your URL and console (F12) for details.";
                 startButton.textContent = "Loading Failed";
                 startButton.disabled = true;
             }
@@ -272,7 +274,7 @@
                 audio.stop();
                 isDetecting = false;
                 startButton.textContent = "Start Detection";
-                startButton.classList.remove('bg-red-700', 'hover:bg-red-800');
+                startButton.classList.remove('bg-green-600', 'hover:bg-green-700');
                 startButton.classList.add('bg-red-600', 'hover:bg-red-700');
                 statusMessage.textContent = "Detection stopped.";
                 document.body.classList.remove('bg-red-100');
@@ -339,7 +341,7 @@
                 }
 
                 // Reset all to default style
-                containerDiv.classList.remove('bg-red-200', 'font-bold');
+                containerDiv.classList.remove('bg-red-200', 'font-bold', 'bg-blue-100');
                 containerDiv.classList.add('bg-gray-100');
             }
 
@@ -347,17 +349,20 @@
             if (maxIndex !== -1) {
                 const maxProbDiv = document.getElementById(`p${maxIndex}`).parentNode;
                 maxProbDiv.classList.remove('bg-gray-100');
-                maxProbDiv.classList.add('bg-blue-100');
+                // Use red for glass, blue for others
+                if (labels[maxIndex].toLowerCase().includes('glass')) {
+                     maxProbDiv.classList.add('bg-red-200');
+                } else {
+                     maxProbDiv.classList.add('bg-blue-100');
+                }
             }
 
             // Handle Glass Break Alert
             if (glassBreakIndex !== -1 && maxProb >= 0.85) {
-                const glassBreakLabel = labels[glassBreakIndex];
                 const glassBreakProb = results[glassBreakIndex].probability.toFixed(2);
 
                 document.body.classList.add('bg-red-100');
                 alertBox.classList.remove('hidden');
-                alertBox.classList.remove('bg-green-100');
                 alertBox.classList.add('bg-red-600', 'text-white', 'animate-pulse');
                 alertBox.innerHTML = `<span class="text-2xl">🚨 GLASS BREAK DETECTED! (${(glassBreakProb * 100).toFixed(0)}%)</span>`;
 
